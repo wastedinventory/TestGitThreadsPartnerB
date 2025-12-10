@@ -1,32 +1,76 @@
 // Siddharth Nori, 12-10-2025
-
-//Synopsis of code purpose: This code looks at every other character, turns it into an ascii, adds it to a string, and adds that ascii string to the end of the sentence for every sentence in the book.
 import java.io.*;
 import java.nio.file.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.*;
+import java.io.UncheckedIOException;
 
 public class TestProject {
 
     public static void main(String[] args) {
 
-        Path inputFile = Paths.get("mobydick.txt");
-        Path outputFile = Paths.get("mobydick_output.txt");
-		Path inputFile2 = Paths.get("warandpeace.txt");
-		Path outputFile2 = Paths.get("warandpeace_output.txt");
+        // Your two large text files
+        Path book1Input  = Paths.get("mobydick.txt");
+        Path book1Output = Paths.get("mobydick_output.txt");
+
+        Path book2Input  = Paths.get("warandpeace.txt");     // change name as needed
+        Path book2Output = Paths.get("warandpeace_output.txt");
 
         long startTime = System.nanoTime();
 
+        // Create a pool with 2 threads (one per book)
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        // One task per book
+        Callable<Void> task1 = createTransformTask(book1Input, book1Output);
+        Callable<Void> task2 = createTransformTask(book2Input, book2Output);
+
+        List<Callable<Void>> tasks = Arrays.asList(task1, task2);
+
         try {
-            transformToOutputFile(inputFile, outputFile);
-            transformToOutputFile(inputFile2, outputFile2);
-        } catch (IOException e) {
+            // Run both tasks in parallel and wait for both to finish
+            List<Future<Void>> futures = executor.invokeAll(tasks);
+
+            // Check for exceptions
+            for (Future<Void> f : futures) {
+                try {
+                    f.get(); // will rethrow any exception from the task
+                } catch (ExecutionException e) {
+                    Throwable cause = e.getCause();
+                    if (cause instanceof UncheckedIOException) {
+                        ((UncheckedIOException) cause).printStackTrace();
+                    } else {
+                        e.printStackTrace();
+                    }
+                }
+            }
+
+        } catch (InterruptedException e) {
             e.printStackTrace();
+        } finally {
+            executor.shutdown();
         }
 
-        System.out.println("Single Threaded Computation Time: " +
-                (System.nanoTime() - startTime) / 1_000_000 + " ms");
+        long endTime = System.nanoTime();
+        System.out.println("Multi-book parallel computation time: " +
+                (endTime - startTime) / 1_000_000 + " ms");
     }
 
-    // ✅ Reads original file, writes transformed output to a NEW FILE
+    // Wrap the file transform in a Callable so ExecutorService can run it
+    private static Callable<Void> createTransformTask(Path inputFile, Path outputFile) {
+        return () -> {
+            try {
+                transformToOutputFile(inputFile, outputFile);
+            } catch (IOException e) {
+                // Wrap checked exception so it can travel through Future/ExecutionException
+                throw new UncheckedIOException(e);
+            }
+            return null;
+        };
+    }
+
+    // Single-threaded transform for one file: input → output
     public static void transformToOutputFile(Path inputFile, Path outputFile)
             throws IOException {
 
@@ -47,28 +91,33 @@ public class TestProject {
         }
     }
 
+    // 🚨 INTENTIONALLY COMPUTATIONALLY EXPENSIVE 🚨
+    // Every other character → ASCII → appended to the end of the sentence
     private static String expensiveAsciiAppend(String sentence) {
 
         String result = "";
 
-        // Wasteful character rebuild
+        // Wasteful rebuild of original sentence
         for (int i = 0; i < sentence.length(); i++) {
             result = result + sentence.charAt(i);
         }
 
-        // Every other character → ASCII → append
+        // Process every other character
         for (int i = 1; i < sentence.length(); i += 2) {
 
+            // Redundant nested loop
             char target = 0;
             for (int j = 0; j <= i; j++) {
                 target = sentence.charAt(j);
             }
 
+            // Redundant ASCII loop
             int ascii = 0;
             for (int k = 0; k < 10; k++) {
                 ascii = (int) target;
             }
 
+            // Slow manual int → String
             String asciiStr = "";
             String temp = Integer.toString(ascii);
             for (int m = 0; m < temp.length(); m++) {
